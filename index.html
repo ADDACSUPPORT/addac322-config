@@ -1,0 +1,149 @@
+<!doctype html>
+<!--
+  The ADDAC322 firmware flasher. A template: tools/release.sh fills in the
+  double-braced fields and writes the result to public/index.html, next to the two
+  images and their ESP Web Tools manifests. Do not open this copy directly.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADDAC322 Firmware</title>
+<meta name="description" content="Install ADDAC322 firmware v0.2 on the joystick and the module from the browser.">
+<script type="module" src="https://cdn.jsdelivr.net/npm/esp-web-tools@10/dist/web/install-button.js"></script>
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1c1a; --muted: #6b6862;
+    --line: #dedbd4; --accent: #1d1c1a; --accent-ink: #ffffff; --warn: #8a5a00;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121211; --panel: #1b1b1a; --ink: #ecebe8; --muted: #9c9993;
+      --line: #2e2d2b; --accent: #ecebe8; --accent-ink: #121211; --warn: #e0b060;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121211; --panel: #1b1b1a; --ink: #ecebe8; --muted: #9c9993;
+    --line: #2e2d2b; --accent: #ecebe8; --accent-ink: #121211; --warn: #e0b060;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 16px 64px; }
+  header { margin-bottom: 28px; }
+  h1 { font-size: 28px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .version { color: var(--muted); margin: 0; }
+  .version strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .note {
+    border-left: 3px solid var(--warn); padding: 10px 14px; margin: 0 0 28px;
+    background: var(--panel); border-radius: 0 6px 6px 0;
+  }
+  .units { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .unit {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 20px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .unit h2 { font-size: 18px; margin: 0; }
+  .unit p { margin: 0; color: var(--muted); }
+  .unit ol { margin: 0; padding-left: 20px; color: var(--muted); }
+  esp-web-install-button { display: block; margin-top: auto; }
+  esp-web-install-button button, .btn {
+    font: inherit; font-weight: 600; cursor: pointer; width: 100%;
+    background: var(--accent); color: var(--accent-ink);
+    border: 0; border-radius: 8px; padding: 12px 16px;
+  }
+  .unsupported { color: var(--warn); font-size: 14px; }
+  h3 { font-size: 16px; margin: 36px 0 8px; }
+  section p, section li { color: var(--muted); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  pre {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px 14px; overflow-x: auto; color: var(--ink);
+  }
+  a { color: inherit; }
+  footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>ADDAC322 firmware</h1>
+    <p class="version">Release <strong>v0.2</strong></p>
+  </header>
+
+  <p class="note">
+    Update <strong>both</strong> the joystick and the module to the same release. They
+    talk over a shared protocol, and a joystick and module from different
+    releases may not work together.
+  </p>
+
+  <div class="units">
+    <div class="unit">
+      <h2>Joystick (transmitter)</h2>
+      <p>The handheld controller. It has two USB-C ports: use the <strong>top</strong> one.
+        The bottom one only charges the battery.</p>
+      <ol>
+        <li>Plug a USB-C data cable into the joystick's <strong>top</strong> port.</li>
+        <li>Press Install and pick the port that appears.</li>
+      </ol>
+      <esp-web-install-button manifest="manifest-tx.json">
+        <button slot="activate">Install on the joystick</button>
+        <span slot="unsupported" class="unsupported">This browser can't flash devices. Use Chrome or Edge on a computer.</span>
+        <span slot="not-allowed" class="unsupported">Flashing needs a secure (https) page.</span>
+      </esp-web-install-button>
+    </div>
+
+    <div class="unit">
+      <h2>ADDAC322 module (receiver)</h2>
+      <p>The Eurorack module.</p>
+      <ol>
+        <li>Connect its native USB port to the computer.</li>
+        <li>Press Install and pick the port that appears.</li>
+      </ol>
+      <esp-web-install-button manifest="manifest-rx.json">
+        <button slot="activate">Install on the module</button>
+        <span slot="unsupported" class="unsupported">This browser can't flash devices. Use Chrome or Edge on a computer.</span>
+        <span slot="not-allowed" class="unsupported">Flashing needs a secure (https) page.</span>
+      </esp-web-install-button>
+    </div>
+  </div>
+
+  <section>
+    <h3>Keep your settings</h3>
+    <p>
+      If the installer offers to erase the device, leave it unticked. The update
+      doesn't touch the pairing, ranges or gate setup, but an erase wipes them.
+    </p>
+
+    <h3>If the device isn't found</h3>
+    <ul>
+      <li>Try another cable: many USB-C cables only carry power.</li>
+      <li><strong>Joystick:</strong> check the cable is in the <strong>top</strong> port; the
+        bottom one only charges and never shows up as a device. If it still isn't found, hold the reset button on its side for about 2 seconds,
+        until the green light comes on, then press Install again.</li>
+      <li><strong>Module:</strong> hold BOOT, press and release RESET, then release BOOT,
+        and press Install again. Power-cycle the module once it has finished.</li>
+    </ul>
+
+    <!-- Hidden for now, kept for a possible return: direct downloads for flashing
+         with esptool. release.sh still fills the fields in here, and the images are
+         still published next to the page.
+    <h3>Without the browser</h3>
+    <p>Download the images and flash them with esptool at offset 0:</p>
+    <ul>
+      <li><a href="addac322-tx-v0.2.bin" download>addac322-tx-v0.2.bin</a> (joystick)</li>
+      <li><a href="addac322-rx-v0.2.bin" download>addac322-rx-v0.2.bin</a> (module)</li>
+    </ul>
+    <pre>esptool.py --chip esp32s3 write_flash 0x0 addac322-tx-v0.2.bin</pre>
+    -->
+  </section>
+
+  <footer>© 2026 ADDAC System</footer>
+</main>
+</body>
+</html>

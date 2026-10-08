@@ -1,0 +1,9 @@
+{
+  "name": "ADDAC322 module (receiver)",
+  "version": "v0.2",
+  "new_install_prompt_erase": false,
+  "new_install_improv_wait_time": 0,
+  "builds": [
+    { "chipFamily": "ESP32-S3", "parts": [ { "path": "addac322-rx-v0.2.bin", "offset": 0 } ] }
+  ]
+}

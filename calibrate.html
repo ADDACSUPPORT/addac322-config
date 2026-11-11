@@ -1,0 +1,418 @@
+<!doctype html>
+<!--
+  ADDAC322 module output calibration. A template like index.html: tools/release.sh
+  fills in the double-braced fields and writes it to public/calibrate.html.
+
+  Talks to the receiver over Web Serial with the line commands in
+  receiver/src/cal_command.h. Everything it stores is computed on the receiver
+  side from the two readings it sends; this page only converts volts to mV.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADDAC322 Calibration</title>
+<meta name="description" content="Calibrate the ADDAC322 module's four CV outputs against a meter, from the browser.">
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1c1a; --muted: #6b6862;
+    --line: #dedbd4; --accent: #1d1c1a; --accent-ink: #ffffff; --warn: #8a5a00;
+    --ok: #2f6b2f; --bad: #a12c2c;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121211; --panel: #1b1b1a; --ink: #ecebe8; --muted: #9c9993;
+      --line: #2e2d2b; --accent: #ecebe8; --accent-ink: #121211; --warn: #e0b060;
+      --ok: #8fc88f; --bad: #e88a8a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121211; --panel: #1b1b1a; --ink: #ecebe8; --muted: #9c9993;
+    --line: #2e2d2b; --accent: #ecebe8; --accent-ink: #121211; --warn: #e0b060;
+    --ok: #8fc88f; --bad: #e88a8a;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 16px 64px; }
+  header { margin-bottom: 28px; }
+  h1 { font-size: 28px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .version { color: var(--muted); margin: 0; }
+  .note {
+    border-left: 3px solid var(--warn); padding: 10px 14px; margin: 0 0 20px;
+    background: var(--panel); border-radius: 0 6px 6px 0;
+  }
+  .note ol { margin: 6px 0 0; padding-left: 20px; }
+  .btn {
+    font: inherit; font-weight: 600; cursor: pointer;
+    background: var(--accent); color: var(--accent-ink);
+    border: 0; border-radius: 8px; padding: 10px 14px;
+  }
+  .btn.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0 0 24px; }
+  .status { color: var(--muted); font-size: 14px; }
+  .jacks { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .jack {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .jack h2 { font-size: 18px; margin: 0; display: flex; justify-content: space-between; align-items: baseline; }
+  .jack h2 small { font-weight: 400; font-size: 13px; color: var(--muted); }
+  .stored { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; margin: 0; }
+  .step { display: grid; grid-template-columns: 1fr 120px; gap: 8px; align-items: center; }
+  .step .btn { width: 100%; }
+  input {
+    font: inherit; font-variant-numeric: tabular-nums; width: 100%;
+    padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--ink);
+  }
+  .preview { font-size: 14px; min-height: 1.5em; margin: 0; font-variant-numeric: tabular-nums; }
+  .preview.bad { color: var(--bad); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row .btn { flex: 1 1 auto; }
+  .active { outline: 2px solid var(--warn); outline-offset: 2px; }
+  .finish { margin-top: 28px; }
+  .dirty { color: var(--warn); font-weight: 600; }
+  details { margin-top: 32px; }
+  summary { cursor: pointer; color: var(--muted); }
+  pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px 14px; overflow-x: auto; max-height: 260px; overflow-y: auto; color: var(--ink);
+  }
+  h3 { font-size: 16px; margin: 36px 0 8px; }
+  section p, section li { color: var(--muted); }
+  footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Module output calibration</h1>
+    <p class="version">Release <strong>v0.3.1</strong></p>
+  </header>
+
+  <div class="note">
+    You need a multimeter on DC volts that reads to the millivolt.
+    <ol>
+      <li>Power the module in the rack and connect its <strong>UART</strong> USB port to
+        this computer (the one the serial monitor uses, not the native USB port).</li>
+      <li>On the joystick, set the output range you will use most. While you measure one
+        jack, the other three sit where the sticks rest in that range.</li>
+      <li>Unpatch the outputs: a jack will be held at ±7.5 V.</li>
+    </ol>
+  </div>
+
+  <div class="bar">
+    <button class="btn" id="connect">Connect to the module</button>
+    <span class="status" id="status">Not connected.</span>
+  </div>
+
+  <div class="jacks" id="jacks"></div>
+
+  <div class="bar finish">
+    <button class="btn" id="save" disabled>Save to the module</button>
+    <button class="btn secondary" id="end" disabled>Release the outputs</button>
+    <span class="status" id="dirty"></span>
+  </div>
+
+  <section>
+    <h3>How it works</h3>
+    <p>
+      For each jack the module outputs two test voltages, nominally −7.5 V and +7.5 V,
+      without any correction. From what your meter reads at each, it works out that jack's
+      zero error and scale error, and corrects every value it outputs from then on, in
+      every range. Use <em>Check</em> to confirm a jack after storing it.
+    </p>
+    <p>
+      Nothing is kept until you press <strong>Save to the module</strong>. The outputs go
+      back to the joystick when you press <strong>Release the outputs</strong>, or by
+      themselves 10 minutes after the last command.
+    </p>
+  </section>
+
+  <details>
+    <summary>Serial log</summary>
+    <pre id="log"></pre>
+  </details>
+
+  <footer>© 2026 ADDAC System</footer>
+</main>
+
+<script>
+"use strict";
+
+// Jack order is the receiver's DAC channel order — see cal_command.h.
+const JACKS = ["Joy1 Y", "Joy1 X", "Joy2 Y", "Joy2 X"];
+// Card order on the page, by channel: X before Y, so X sits on the left.
+const DISPLAY_ORDER = [1, 0, 3, 2];
+const NOMINAL = { lo: -7500, hi: 7500 };   // updated from CAL TEST on connect
+// Mirrors output_cal.h, so the page can say why before the module refuses.
+const MAX_ZERO_MV = 1500, MIN_SPAN_MV = 12000, MAX_SPAN_MV = 18000;
+
+const $ = (id) => document.getElementById(id);
+let port = null, writer = null;
+let waiting = null;      // { resolve, timer } for the command in flight
+let queue = Promise.resolve();
+const stored = [null, null, null, null];
+let dirty = false;
+
+function log(line) {
+  const el = $("log");
+  el.textContent += line + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStatus(text) { $("status").textContent = text; }
+
+function setDirty(d) {
+  dirty = d;
+  $("dirty").textContent = d ? "Unsaved changes" : "";
+  $("dirty").className = d ? "status dirty" : "status";
+}
+
+// ── Jack cards ──────────────────────────────────────────────────────────────
+
+function buildJacks() {
+  const host = $("jacks");
+  DISPLAY_ORDER.forEach((ch) => {
+    const name = JACKS[ch];
+    const card = document.createElement("div");
+    card.className = "jack";
+    card.id = `jack${ch}`;
+    card.innerHTML = `
+      <h2>${name} <small>channel ${ch}</small></h2>
+      <p class="stored" id="stored${ch}">Not read yet.</p>
+      <div class="step">
+        <button class="btn secondary" data-drive="lo">Output −7.5 V</button>
+        <input inputmode="decimal" placeholder="meter, V" id="lo${ch}" aria-label="${name} reading at −7.5 V">
+      </div>
+      <div class="step">
+        <button class="btn secondary" data-drive="hi">Output +7.5 V</button>
+        <input inputmode="decimal" placeholder="meter, V" id="hi${ch}" aria-label="${name} reading at +7.5 V">
+      </div>
+      <p class="preview" id="preview${ch}"></p>
+      <div class="row">
+        <button class="btn" data-act="store">Store</button>
+        <button class="btn secondary" data-act="check0">Check 0 V</button>
+        <button class="btn secondary" data-act="check5">Check +5 V</button>
+        <button class="btn secondary" data-act="clear">Clear</button>
+      </div>`;
+    host.appendChild(card);
+
+    card.querySelectorAll("[data-drive]").forEach((b) =>
+      b.addEventListener("click", () => drive(ch, b.dataset.drive)));
+    card.querySelector('[data-act="store"]').addEventListener("click", () => store(ch));
+    card.querySelector('[data-act="check0"]').addEventListener("click", () => check(ch, 0));
+    card.querySelector('[data-act="check5"]').addEventListener("click", () => check(ch, 5000));
+    card.querySelector('[data-act="clear"]').addEventListener("click", () => clearJack(ch));
+    [`lo${ch}`, `hi${ch}`].forEach((id) => $(id).addEventListener("input", () => preview(ch)));
+  });
+  setEnabled(false);
+}
+
+function setEnabled(on) {
+  document.querySelectorAll(".jack button, .jack input").forEach((el) => (el.disabled = !on));
+  $("save").disabled = !on;
+  $("end").disabled = !on;
+}
+
+function markActive(ch) {
+  JACKS.forEach((_, i) => $(`jack${i}`).classList.toggle("active", i === ch));
+}
+
+// Volts as typed — "7.65", "-6,99" — to whole millivolts, or null.
+function readMv(id) {
+  const s = $(id).value.trim().replace(",", ".");
+  if (!/^[-+]?\d*\.?\d+$/.test(s)) return null;
+  return Math.round(parseFloat(s) * 1000);
+}
+
+function describe(lo, hi) {
+  const zero = (lo + hi) / 2;
+  const scale = (hi - lo) / (NOMINAL.hi - NOMINAL.lo);
+  const sign = zero >= 0 ? "+" : "−";
+  return `zero ${sign}${Math.abs(zero / 1000).toFixed(3)} V, scale ${((scale - 1) * 100).toFixed(2)} %`;
+}
+
+function problem(lo, hi) {
+  const zero = (lo + hi) / 2, span = hi - lo;
+  if (span < MIN_SPAN_MV || span > MAX_SPAN_MV)
+    return "These two readings are too far from 15 V apart. Check the meter is on this jack.";
+  if (Math.abs(zero) > MAX_ZERO_MV)
+    return "The zero is more than 1.5 V out. That needs a hardware fix, not calibration.";
+  return null;
+}
+
+function preview(ch) {
+  const lo = readMv(`lo${ch}`), hi = readMv(`hi${ch}`);
+  const el = $(`preview${ch}`);
+  if (lo === null || hi === null) { el.textContent = ""; el.className = "preview"; return; }
+  const p = problem(lo, hi);
+  el.textContent = p || `Will correct ${describe(lo, hi)}.`;
+  el.className = p ? "preview bad" : "preview";
+}
+
+function showStored(ch) {
+  const s = stored[ch];
+  if (!s) return;
+  const nominal = s.lo === NOMINAL.lo && s.hi === NOMINAL.hi;
+  $(`stored${ch}`).textContent = nominal
+    ? "Uncalibrated."
+    : `Stored: ${(s.lo / 1000).toFixed(3)} V / ${(s.hi / 1000).toFixed(3)} V — ${describe(s.lo, s.hi)}`;
+}
+
+// ── Serial ──────────────────────────────────────────────────────────────────
+
+// Sends one command and resolves with its CAL OK / CAL ERR line. Commands are
+// queued, so a fast double click can't interleave two replies.
+function send(cmd, { expectDump = false, timeoutMs = 2000 } = {}) {
+  const run = () => new Promise(async (resolve) => {
+    const timer = setTimeout(() => { waiting = null; resolve(null); }, timeoutMs);
+    waiting = { resolve: (line) => { clearTimeout(timer); waiting = null; resolve(line); }, expectDump };
+    log("> " + cmd);
+    try { await writer.write(new TextEncoder().encode(cmd + "\n")); }
+    catch (e) { waiting.resolve(null); }
+  });
+  queue = queue.then(run, run);
+  return queue;
+}
+
+function onLine(line) {
+  if (line.startsWith("Receiver ready")) setStatus(line.replace("Receiver ready — ", "Connected — "));
+  if (!line.startsWith("CAL ")) return;
+  log(line);
+
+  const f = line.split(/\s+/);
+  if (f[1] === "TEST") {
+    NOMINAL.hi = parseInt(f[3], 10);
+    NOMINAL.lo = -NOMINAL.hi;
+  } else if (f[1] === "CH") {
+    const ch = parseInt(f[2], 10);
+    stored[ch] = { lo: parseInt(f[3], 10), hi: parseInt(f[4], 10) };
+    showStored(ch);
+  } else if (f[1] === "DONE") {
+    if (waiting && waiting.expectDump) waiting.resolve(line);
+  } else if ((f[1] === "OK" || f[1] === "ERR") && waiting && !waiting.expectDump) {
+    waiting.resolve(line);
+  }
+}
+
+async function readLoop() {
+  const decoder = new TextDecoderStream();
+  port.readable.pipeTo(decoder.writable).catch(() => {});
+  const reader = decoder.readable.getReader();
+  let buf = "";
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        onLine(buf.slice(0, i).replace(/\r$/, ""));
+        buf = buf.slice(i + 1);
+      }
+    }
+  } catch (e) { /* port closed */ }
+  setStatus("Disconnected.");
+  setEnabled(false);
+  markActive(-1);
+}
+
+async function connect() {
+  if (!("serial" in navigator)) {
+    setStatus("This browser can't open serial ports. Use Chrome or Edge on a computer.");
+    return;
+  }
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+    // Deassert both, or the DevKit's auto-reset circuit can hold the ESP32 in reset.
+    await port.setSignals({ dataTerminalReady: false, requestToSend: false }).catch(() => {});
+  } catch (e) {
+    setStatus("Couldn't open the port: " + e.message);
+    return;
+  }
+  writer = port.writable.getWriter();
+  readLoop();
+  setStatus("Waiting for the module…");
+
+  // Opening the port may have reset the module; ask until it answers.
+  for (let i = 0; i < 10; ++i) {
+    if (await send("cal", { expectDump: true, timeoutMs: 1000 })) {
+      if ($("status").textContent.startsWith("Waiting")) setStatus("Connected.");
+      setEnabled(true);
+      $("connect").disabled = true;
+      return;
+    }
+  }
+  setStatus("The module didn't answer. Check it's the UART port and the firmware is up to date.");
+}
+
+// ── Actions ─────────────────────────────────────────────────────────────────
+
+async function reply(cmd, okText) {
+  const r = await send(cmd);
+  if (!r) setStatus(`No reply to "${cmd}".`);
+  else if (r.startsWith("CAL ERR")) setStatus(r.slice(8));
+  else if (okText) setStatus(okText);
+  return r && r.startsWith("CAL OK");
+}
+
+async function drive(ch, which) {
+  if (await reply(`cal drive ${ch} ${which}`,
+        `${JACKS[ch]} is at nominal ${which === "hi" ? "+" : "−"}7.5 V. Type what the meter reads.`)) {
+    markActive(ch);
+    $(`${which}${ch}`).focus();
+  }
+}
+
+async function store(ch) {
+  const lo = readMv(`lo${ch}`), hi = readMv(`hi${ch}`);
+  if (lo === null || hi === null) { setStatus(`Enter both readings for ${JACKS[ch]} first.`); return; }
+  const p = problem(lo, hi);
+  if (p) { setStatus(p); return; }
+  if (await reply(`cal set ${ch} ${lo} ${hi}`, `${JACKS[ch]} stored. Check it, then save.`)) {
+    stored[ch] = { lo, hi };
+    showStored(ch);
+    setDirty(true);
+  }
+}
+
+async function check(ch, mv) {
+  if (await reply(`cal check ${ch} ${mv}`,
+        `${JACKS[ch]} should now read ${(mv / 1000).toFixed(3)} V on the meter.`))
+    markActive(ch);
+}
+
+async function clearJack(ch) {
+  if (await reply(`cal clear ${ch}`, `${JACKS[ch]} is uncalibrated again.`)) {
+    stored[ch] = { lo: NOMINAL.lo, hi: NOMINAL.hi };
+    showStored(ch);
+    $(`lo${ch}`).value = $(`hi${ch}`).value = "";
+    preview(ch);
+    setDirty(true);
+  }
+}
+
+$("connect").addEventListener("click", connect);
+$("save").addEventListener("click", async () => {
+  if (await reply("cal save", "Saved. The module keeps this calibration across power cycles and updates."))
+    setDirty(false);
+});
+$("end").addEventListener("click", async () => {
+  if (await reply("cal end", "Outputs released back to the joystick.")) markActive(-1);
+});
+window.addEventListener("beforeunload", (e) => { if (dirty) e.preventDefault(); });
+
+buildJacks();
+</script>
+</body>
+</html>
